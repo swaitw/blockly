@@ -8,39 +8,47 @@
  * @fileoverview Gulp script to build Blockly for Node & NPM.
  * Run this script by calling "npm install" in this directory.
  */
+/* eslint-env node */
 
-var gulp = require('gulp');
+const gulp = require('gulp');
 
-var typings = require('./scripts/gulpfiles/typings');
-var buildTasks = require('./scripts/gulpfiles/build_tasks');
-var packageTasks = require('./scripts/gulpfiles/package_tasks');
-var gitTasks = require('./scripts/gulpfiles/git_tasks');
-var licenseTasks = require('./scripts/gulpfiles/license_tasks');
-var appengineTasks = require('./scripts/gulpfiles/appengine_tasks');
-var releaseTasks = require('./scripts/gulpfiles/release_tasks');
-var cleanupTasks = require('./scripts/gulpfiles/cleanup_tasks');
+const buildTasks = require('./scripts/gulpfiles/build_tasks');
+const packageTasks = require('./scripts/gulpfiles/package_tasks');
+const gitTasks = require('./scripts/gulpfiles/git_tasks');
+const appengineTasks = require('./scripts/gulpfiles/appengine_tasks');
+const releaseTasks = require('./scripts/gulpfiles/release_tasks');
+const docsTasks = require('./scripts/gulpfiles/docs_tasks');
+const testTasks = require('./scripts/gulpfiles/test_tasks');
 
 module.exports = {
-  deployDemos: appengineTasks.deployDemos,
+  // Default target if gulp invoked without specifying.
   default: buildTasks.build,
+
+  // Main sequence targets.  They already invoke prerequisites.
+  langfiles: buildTasks.langfiles, // Build build/msg/*.js from msg/json/*.
+  tsc: buildTasks.tsc,
+  deps: buildTasks.deps,
+  minify: buildTasks.minify,
   build: buildTasks.build,
-  buildCore: buildTasks.core,
-  buildBlocks: buildTasks.blocks,
-  buildLangfiles: buildTasks.langfiles,
-  buildUncompressed: buildTasks.uncompressed,
-  buildCompressed: buildTasks.compressed,
-  buildGenerators: buildTasks.generators,
-  buildAdvancedCompilationTest: buildTasks.advancedCompilationTest,
-  gitSyncDevelop: gitTasks.syncDevelop,
-  gitSyncMaster: gitTasks.syncMaster,
-  gitCreateRC: gitTasks.createRC,
-  gitUpdateGithubPages: gitTasks.updateGithubPages,
-  typings: gulp.series(typings.typings, typings.msgTypings),
   package: packageTasks.package,
-  checkLicenses: licenseTasks.checkLicenses,
-  recompile: releaseTasks.recompile,
-  prepareDemos: appengineTasks.prepareDemos,
   publish: releaseTasks.publish,
   publishBeta: releaseTasks.publishBeta,
-  sortRequires: cleanupTasks.sortRequires,
+  prepareDemos: appengineTasks.prepareDemos,
+  deployDemos: appengineTasks.deployDemos,
+  deployDemosBeta: appengineTasks.deployDemosBeta,
+  gitUpdateGithubPages: gitTasks.updateGithubPages,
+
+  // Manually-invokable targets, with prerequisites where required.
+  messages: buildTasks.messages, // Generate msg/json/en.json et al.
+  clean: gulp.parallel(buildTasks.cleanBuildDir, packageTasks.cleanReleaseDir),
+  test: testTasks.test,
+  testGenerators: testTasks.generators,
+  buildAdvancedCompilationTest: buildTasks.buildAdvancedCompilationTest,
+  gitCreateRC: gitTasks.createRC,
+  docs: docsTasks.docs,
+
+  // Legacy targets, to be deleted.
+  recompile: releaseTasks.recompile,
+  gitSyncDevelop: gitTasks.syncDevelop,
+  gitSyncMaster: gitTasks.syncMaster,
 };

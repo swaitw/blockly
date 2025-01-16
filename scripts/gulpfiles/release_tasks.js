@@ -8,24 +8,22 @@
  * @fileoverview Gulp scripts for releasing Blockly.
  */
 
-var execSync = require('child_process').execSync;
-var fs = require('fs');
-var gulp = require('gulp');
-var readlineSync = require('readline-sync');
-var typings = require('./typings');
+const execSync = require('child_process').execSync;
+const fs = require('fs');
+const gulp = require('gulp');
+const readlineSync = require('readline-sync');
 
-var buildTasks = require('./build_tasks');
-var gitTasks = require('./git_tasks');
-var packageTasks = require('./package_tasks');
-var { getPackageJson } = require('./helper_tasks');
+const gitTasks = require('./git_tasks');
+const packageTasks = require('./package_tasks');
+const {getPackageJson} = require('./helper_tasks');
+const {RELEASE_DIR} = require('./config');
 
-const RELEASE_DIR = 'dist';
 
 // Gets the current major version.
 function getMajorVersion() {
-  var { version } = getPackageJson();
-  var re = new RegExp(/^(\d)./);
-  var match = re.exec(version);
+  const { version } = getPackageJson();
+  const re = new RegExp(/^(\d)./);
+  const match = re.exec(version);
   if (!match[0]) {
     return null;
   }
@@ -35,7 +33,7 @@ function getMajorVersion() {
 
 // Updates the version depending on user input.
 function updateVersion(done, updateType) {
-  var majorVersion = getMajorVersion();
+  const majorVersion = getMajorVersion();
   if (!majorVersion) {
     done(new Error('Something went wrong when getting the major version number.'));
   } else if (!updateType) {
@@ -64,14 +62,14 @@ function updateVersion(done, updateType) {
 
 // Prompt the user to figure out what kind of version update we should do.
 function updateVersionPrompt(done) {
-  var releaseTypes = ['Major', 'Minor', 'Patch'];
-  var index = readlineSync.keyInSelect(releaseTypes, 'Which version type?');
+  const releaseTypes = ['Major', 'Minor', 'Patch'];
+  const index = readlineSync.keyInSelect(releaseTypes, 'Which version type?');
   updateVersion(done, releaseTypes[index]);
 }
 
 // Checks with the user that they are on the correct git branch.
 function checkBranch(done) {
-  var gitBranchName = execSync('git rev-parse --abbrev-ref HEAD').toString();
+  const gitBranchName = execSync('git rev-parse --abbrev-ref HEAD').toString();
   if (readlineSync.keyInYN(`You are on '${gitBranchName.trim()}'. Is this the correct branch?`)) {
     done();
   } else {
@@ -80,27 +78,31 @@ function checkBranch(done) {
 }
 
 
-// Sanity check that the dist folder exists, and that certain files are in the dist folder.
-function checkDist(done) {
-  const sanityFiles = ['blockly_compressed.js', 'blocks_compressed.js', 'core', 'blocks', 'generators'];
-  // Check that dist exists.
+// Sanity check that the RELASE_DIR directory exists, and that certain
+// files are in it.
+function checkReleaseDir(done) {
+  const sanityFiles = ['blockly_compressed.js', 'blocks_compressed.js'];
+  // Check that directory exists.
   if (fs.existsSync(RELEASE_DIR)) {
-    // Sanity check that certain files exist in dist.
+    // Sanity check that certain files exist in RELASE_DIR.
     sanityFiles.forEach((fileName) => {
       if (!fs.existsSync(`${RELEASE_DIR}/${fileName}`)) {
-        done(new Error(`Your dist folder does not contain:${fileName}`));
+        done(new Error(
+            `Your ${RELEASE_DIR} directory does not contain ${fileName}`));
+        return;
       }
     });
     done();
   } else {
-    done(new Error('The dist directory does not exist. Is packageTasks.package being run?'));
+    done(new Error(`The ${RELEASE_DIR} directory does not exist.  ` +
+        'Has packageTasks.package been run?'));
   }
 }
 
 // Check with the user that the version number is correct, then login and publish to npm.
 function loginAndPublish_(done, isBeta) {
-  var { version } = getPackageJson();
-  if(readlineSync.keyInYN(`You are about to publish blockly with the version number:${version}. Do you want to continue?`)) {
+  const { version } = getPackageJson();
+  if (readlineSync.keyInYN(`You are about to publish blockly with the version number:${version}. Do you want to continue?`)) {
     execSync(`npm login --registry https://wombat-dressing-room.appspot.com`, {stdio: 'inherit'});
     execSync(`npm publish --registry https://wombat-dressing-room.appspot.com ${isBeta ? '--tag beta' : ''}`, {cwd: RELEASE_DIR, stdio: 'inherit'});
     done();
@@ -122,15 +124,15 @@ function loginAndPublishBeta(done) {
 // Repeatedly prompts the user for a beta version number until a valid one is given.
 // A valid version number must have '-beta.x' and can not have already been used to publish to npm.
 function updateBetaVersion(done) {
-  var isValid = false;
-  var newVersion = null;
-  var blocklyVersions = JSON.parse(execSync('npm view blockly versions --json').toString());
-  var re = new RegExp(/-beta\.(\d)/);
-  var latestBetaVersion = execSync('npm show blockly version --tag beta').toString().trim();
-  while(!isValid) {
+  let isValid = false;
+  let newVersion = null;
+  const blocklyVersions = JSON.parse(execSync('npm view blockly versions --json').toString());
+  const re = new RegExp(/-beta\.(\d)/);
+  const latestBetaVersion = execSync('npm show blockly version --tag beta').toString().trim();
+  while (!isValid) {
     newVersion = readlineSync.question(`What is the new beta version? (latest beta version: ${latestBetaVersion})`);
-    var existsOnNpm = blocklyVersions.indexOf(newVersion) > -1;
-    var isFormatted = newVersion.search(re) > -1;
+    const existsOnNpm = blocklyVersions.includes(newVersion);
+    const isFormatted = newVersion.search(re) > -1;
     if (!existsOnNpm && isFormatted) {
       isValid = true;
     } else if (existsOnNpm) {
@@ -144,36 +146,38 @@ function updateBetaVersion(done) {
   done();
 }
 
-// Package and publish to npm.
+// Rebuild, package and publish to npm.
 const publish = gulp.series(
-  packageTasks.package,
+  packageTasks.package,  // Does clean + build.
   checkBranch,
-  checkDist,
+  checkReleaseDir,
   loginAndPublish
 );
 
-// Publish a beta version of Blockly.
+// Rebuild, package and publish a beta version of Blockly.
 const publishBeta = gulp.series(
   updateBetaVersion,
-  buildTasks.build,
-  packageTasks.package,
+  packageTasks.package,  // Does clean + build.
   checkBranch,
-  checkDist,
+  checkReleaseDir,
   loginAndPublishBeta
 );
 
-// Switch to a new branch, update the version number, and build Blockly.
-const recompile = gulp.series(
+// Switch to a new branch, update the version number, build Blockly
+// and check in the resulting built files.
+const recompileDevelop = gulp.series(
   gitTasks.syncDevelop(),
   gitTasks.createRebuildBranch,
   updateVersionPrompt,
-  buildTasks.build,
-  typings.typings,
+  packageTasks.package,  // Does clean + build.
   gitTasks.pushRebuildBranch
   );
 
 module.exports = {
-  recompile: recompile,
-  publishBeta: publishBeta,
-  publish: publish
-}
+  // Main sequence targets.  Each should invoke any immediate prerequisite(s).
+  publishBeta,
+  publish,
+
+  // Legacy target, to be deleted.
+  recompile: recompileDevelop,
+};
